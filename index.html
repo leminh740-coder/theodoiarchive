@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tài khoản Archive.org đang theo dõi</title>
+<style>
+  :root {
+    --ink: #1a2a3a; --navy: #23508c; --navy-dark: #1a3d6e;
+    --paper: #f7f5f0; --card: #ffffff; --line: #e2ddd2;
+    --muted: #6b7280; --danger: #b23b3b; --amber: #8a6d1f; --amber-bg: #fdf6e3;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--paper); color: var(--ink); line-height: 1.5; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 20px 80px; }
+  header { margin-bottom: 22px; }
+  h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .count { color: var(--navy); font-weight: 600; }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 18px; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 700; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  input[type="text"] { flex: 1 1 200px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px;
+    font-size: 15px; font-family: inherit; background: #fff; color: var(--ink); }
+  input[type="text"]:focus { outline: 2px solid var(--navy); outline-offset: 1px; border-color: var(--navy); }
+  button { font-family: inherit; font-size: 15px; font-weight: 600; border: none; border-radius: 8px; padding: 11px 16px; cursor: pointer; transition: background .12s; }
+  .btn-add { background: var(--navy); color: #fff; }
+  .btn-add:hover { background: var(--navy-dark); }
+  .btn-ghost { background: #eef1f5; color: var(--navy); }
+  .btn-ghost:hover { background: #e3e8ef; }
+
+  .search-bar { margin-bottom: 14px; }
+  .search-bar input { width: 100%; }
+
+  ul#list { list-style: none; margin: 0; padding: 0; }
+  li.item { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+  li.item .num { color: var(--muted); font-size: 13px; min-width: 26px; font-variant-numeric: tabular-nums; }
+  li.item a { flex: 1; color: var(--navy); text-decoration: none; font-weight: 600; font-size: 16px; word-break: break-word; }
+  li.item a:hover { text-decoration: underline; }
+  li.item .url { display: block; color: var(--muted); font-size: 12px; font-weight: 400; margin-top: 2px; }
+  .del { background: none; color: var(--danger); padding: 6px 10px; font-size: 13px; border: 1px solid transparent; }
+  .del:hover { border-color: var(--danger); background: #fbeeee; }
+  .empty { text-align: center; color: var(--muted); padding: 30px 10px; }
+
+  .savebar { display: none; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--amber-bg); border: 1px solid #ecdcaf; color: var(--amber); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 14px; }
+  .savebar.show { display: flex; }
+  .savebar button { background: var(--amber); color: #fff; font-size: 14px; padding: 9px 14px; }
+
+  .hint { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Tài khoản Archive.org đang theo dõi</h1>
+    <div class="sub"><span class="count" id="count">…</span> tài khoản · bấm tên để mở trang</div>
+  </header>
+
+  <div class="panel">
+    <h2>Thêm tài khoản</h2>
+    <div class="row">
+      <input type="text" id="nameInput" placeholder="Tên (vd: minh lê740)">
+      <input type="text" id="urlInput" placeholder="archive.org/details/@minh_l_740">
+      <button class="btn-add" id="addBtn">Thêm</button>
+    </div>
+    <div class="hint">Bỏ trống ô tên thì trang tự lấy tên từ link.</div>
+  </div>
+
+  <div class="savebar" id="savebar">
+    <span>Bạn vừa sửa danh sách. Tải file mới rồi tải nó lên GitHub (đè lên <b>data.json</b> cũ) để lưu vĩnh viễn.</span>
+    <button id="downloadBtn">Tải data.json</button>
+  </div>
+
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="Tìm nhanh trong danh sách…">
+  </div>
+
+  <ul id="list"></ul>
+</div>
+
+<script>
+  let list = [];
+  let dirty = false;
+
+  const listEl = document.getElementById('list');
+  const countEl = document.getElementById('count');
+  const searchEl = document.getElementById('searchInput');
+  const savebar = document.getElementById('savebar');
+
+  // Đọc data.json (thêm ?t= để không bị trình duyệt lưu bản cũ)
+  fetch('data.json?t=' + Date.now())
+    .then(r => r.ok ? r.json() : [])
+    .then(data => { list = Array.isArray(data) ? data : []; render(); })
+    .catch(() => { list = []; render(); });
+
+  function normalizeUrl(u) {
+    u = u.trim(); if (!u) return '';
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u.replace(/^\/+/, '');
+    return u;
+  }
+  function nameFromUrl(u) {
+    const m = u.match(/@([^\/\?#]+)/); if (m) return m[1];
+    const parts = u.replace(/\/+$/, '').split('/'); return parts[parts.length - 1] || u;
+  }
+  function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function markDirty(){ dirty = true; savebar.classList.add('show'); }
+
+  function render() {
+    const q = searchEl.value.trim().toLowerCase();
+    const shown = list.map((it,i)=>({it,i})).filter(({it})=>!q || it.name.toLowerCase().includes(q) || it.url.toLowerCase().includes(q));
+    countEl.textContent = list.length;
+    listEl.innerHTML = '';
+    if (shown.length === 0) {
+      const d = document.createElement('div'); d.className='empty';
+      d.textContent = list.length===0 ? 'Chưa có tài khoản nào (hoặc chưa đọc được data.json).' : 'Không tìm thấy tài khoản khớp.';
+      listEl.appendChild(d); return;
+    }
+    shown.forEach(({it,i},order)=>{
+      const li=document.createElement('li'); li.className='item';
+      const num=document.createElement('span'); num.className='num'; num.textContent=order+1;
+      const a=document.createElement('a'); a.href=it.url; a.target='_blank'; a.rel='noopener';
+      a.innerHTML=escapeHtml(it.name)+'<span class="url">'+escapeHtml(it.url)+'</span>';
+      const del=document.createElement('button'); del.className='del'; del.textContent='Xóa';
+      del.onclick=()=>{ list.splice(i,1); markDirty(); render(); };
+      li.appendChild(num); li.appendChild(a); li.appendChild(del); listEl.appendChild(li);
+    });
+  }
+
+  function addItem(){
+    const nameIn=document.getElementById('nameInput'), urlIn=document.getElementById('urlInput');
+    const url=normalizeUrl(urlIn.value); if(!url){urlIn.focus();return;}
+    const name=nameIn.value.trim()||nameFromUrl(url);
+    list.push({name,url}); markDirty();
+    nameIn.value=''; urlIn.value=''; searchEl.value=''; render(); nameIn.focus();
+  }
+
+  document.getElementById('addBtn').onclick=addItem;
+  document.getElementById('urlInput').addEventListener('keydown',e=>{if(e.key==='Enter')addItem();});
+  document.getElementById('nameInput').addEventListener('keydown',e=>{if(e.key==='Enter')addItem();});
+  searchEl.addEventListener('input',render);
+
+  document.getElementById('downloadBtn').onclick=()=>{
+    const blob=new Blob([JSON.stringify(list,null,2)],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='data.json'; a.click();
+    URL.revokeObjectURL(a.href);
+  };
+</script>
+</body>
+</html>
